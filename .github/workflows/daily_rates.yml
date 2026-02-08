@@ -2,7 +2,7 @@ name: Daily Exchange Rates Update
 
 on:
   schedule:
-    - cron: '01 7 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
 
       - name: 라이브러리 설치
         run: |
-          pip install requests pandas python-dotenv
+          pip install requests pandas python-dotenv pymysql
 
       - name: 환율 스크립트 실행
         env:
