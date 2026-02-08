@@ -30,6 +30,11 @@ jobs:
       - name: 환율 스크립트 실행
         env:
           EXCHANGE_KEY: ${{ secrets.EXCHANGE_KEY }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ secrets.DB_PORT }}
         run: |
           python fetch_rates.py
 
