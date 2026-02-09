@@ -20,7 +20,6 @@ except ImportError as e:
     logging.error(f"❌ utils 폴더를 찾을 수 없습니다. 경로 확인 필요: {e}")
     sys.exit(1)
 
-
 load_dotenv()
 
 # --- [로깅 설정] ---
@@ -33,13 +32,13 @@ def setup_logging():
         level=logging.INFO,
         format="[%(asctime)s] %(levelname)s: %(message)s",
         handlers=[
-            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+            logging.FileHandler(log_file, mode='w', encoding='utf-8-sig'),
             logging.StreamHandler(sys.stdout)
         ]
     )
 
 def fetch_naver_rates():
-    """네이버 금융 환율 정보를 가져옵니다. (HTML 파일 저장 포함)"""
+    """네이버 금융 환율 정보를 가져옵니다."""
     url = "https://finance.naver.com/marketindex/exchangeList.naver"
     
     headers = {
@@ -52,54 +51,41 @@ def fetch_naver_rates():
         response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            # 1. 인코딩 설정 (네이버 금융은 cp949/euc-kr 사용)
-            response.encoding = 'cp949'
+            response.encoding = 'cp949' # 네이버 금융 인코딩
             
-            # 2. [추가됨] 날짜 및 경로 설정
             now = datetime.now()
             date_str = now.strftime("%Y%m%d")
             
             save_dir = "data"
-            os.makedirs(save_dir, exist_ok=True) # 폴더가 없으면 생성
+            os.makedirs(save_dir, exist_ok=True)
             
-            # 3. [추가됨] HTML 파일 저장 로직
-            html_filename = os.path.join(save_dir, f"naver_exchange.html")
+            # HTML 파일 저장
+            html_filename = os.path.join(save_dir, "naver_exchange.html")
             try:
-                # 원본은 cp949지만, 저장할 때는 범용적인 utf-8로 변환하여 저장합니다.
-                with open(html_filename, "w", encoding="utf-8") as f:
+                with open(html_filename, "w", encoding="utf-8-sig") as f:
                     f.write(response.text)
-                logging.info(f"💾 원본 HTML 저장 완료: {html_filename}")
-            except Exception as e:
-                logging.error(f"⚠️ HTML 파일 저장 실패: {e}")
+            except Exception:
+                pass # HTML 저장 실패는 로그 생략
 
-            # 4. 데이터 파싱
+            # 데이터 파싱
             try:
-                # response.text를 바로 read_html에 넣으면 파일 경로로 착각할 수 있어 io.StringIO 사용
                 html_io = io.StringIO(response.text)
-                
-                # header=1: 두 번째 줄(사실 때, 파실 때 등)을 헤더로 인식 시도
                 dfs = pd.read_html(html_io, header=1)
                 
                 if dfs:
                     df = dfs[0]
-                    # 네이버 금융 환율표 구조 기반 인덱싱
                     target_df = df.iloc[:, [0, 1, 4, 5]].copy()
-                    target_df.columns = ['통화명', '매매기준율', '전신환_보내실때', '전신환_받으실때']
+                    target_df.columns = ['raw_name', '매매기준율', '송금_보내실때', '송금_받으실때']
                     
                     logging.info(f"✅ 파싱 성공! 데이터 {len(target_df)}건을 찾았습니다.")
                     return target_df, date_str
                 else:
-                    logging.warning("⚠️ HTML 테이블을 찾을 수 없습니다.")
                     return None, None
 
-            except ImportError:
-                logging.error("❌ 'lxml' 라이브러리가 필요합니다. 터미널에 'pip install lxml'을 입력하세요.")
-                return None, None
             except Exception as parse_error:
                 logging.error(f"⚠️ 파싱 중 에러 발생: {parse_error}")
                 return None, None
         else:
-            logging.error(f"❌ 요청 실패 (Status: {response.status_code})")
             return None, None
 
     except Exception as e:
@@ -107,41 +93,36 @@ def fetch_naver_rates():
         return None, None
 
 def process_and_save(df, date_str):
-    """데이터 전처리 및 저장 (CSV + MySQL)"""
+    """데이터 전처리 및 저장"""
     if df is None or df.empty:
         return
 
-    # 전처리 작업을 위해 복사
     df = df.copy()
 
-    # 1. 통화명 정제 (HTML의 공백/개행문자 제거)
-    df['국가/통화명'] = df['통화명'].astype(str).str.strip()
-    
-    # 통화코드 추출 (예: "미국 USD" -> "USD", "일본 JPY (100엔)" -> "JPY")
-    def extract_code(text):
-        match = re.search(r'([A-Z]{3})', text)
-        return match.group(1) if match else 'KRW'
-    
-    df['통화코드'] = df['국가/통화명'].apply(extract_code)
+    # 1. 국가명과 통화코드 분리
+    def parse_currency(text):
+        text = str(text).strip()
+        match = re.search(r'^(.*?)\s+([A-Z]{3})', text)
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+        return text, 'KRW'
 
-    # 2. 숫자 데이터 전처리 (콤마 제거, N/A 처리)
-    target_cols = ['매매기준율', '전신환_보내실때', '전신환_받으실때']
-    
-    for col in target_cols:
-        # 문자열 변환 -> 콤마 제거 -> 숫자로 변환 (실패시 NaN) -> NaN은 0으로 대체
+    df[['국가명', '통화명']] = df['raw_name'].apply(lambda x: pd.Series(parse_currency(x)))
+
+    # 2. 숫자 데이터 전처리
+    numeric_cols = ['매매기준율', '송금_보내실때', '송금_받으실때']
+    for col in numeric_cols:
         df[col] = df[col].astype(str).str.replace(",", "").str.strip()
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     # 3. 기준일자 추가
     df['기준일자'] = date_str
 
-    # 4. 저장할 컬럼 순서 정리
-    final_columns = ['기준일자', '통화코드', '국가/통화명', '매매기준율', '전신환_받으실때', '전신환_보내실때']
+    # 4. CSV 저장 (요청하신 순서: 통화명, 국가명, 매매기준율, 보내실때, 받으실때)
+    final_columns = ['기준일자', '통화명', '국가명', '매매기준율', '송금_보내실때', '송금_받으실때']
     df = df[final_columns]
 
-    # --- CSV 저장 ---
     save_dir = "data"
-    # os.makedirs(save_dir, exist_ok=True) # fetch 단계에서 이미 생성했으므로 생략 가능하나 안전장치로 유지해도 됨
     csv_filename = os.path.join(save_dir, "exchange_rates.csv")
     df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
     logging.info(f"💾 CSV 저장 완료: {csv_filename}")
@@ -150,20 +131,20 @@ def process_and_save(df, date_str):
     save_to_mysql(df, date_str)
 
 def save_to_mysql(df, date_str):
-    """MySQL 데이터베이스에 저장"""
+    """MySQL 데이터베이스에 저장 (수정된 테이블 구조 반영)"""
     formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
 
     try:
         logging.info(f"🔌 MySQL 저장 시작 (기준일: {formatted_date})")
         
-        # 1. 기존 데이터 삭제 (중복 방지)
+        # 1. 기존 데이터 삭제
         delete_sql = "DELETE FROM exchange_rates WHERE reference_date = %s or reference_date != %s"
         execute_query(delete_sql, (formatted_date,formatted_date))
         
-        # 2. 새 데이터 삽입
+        # 2. 새 데이터 삽입 (컬럼명 변경 반영: base_rate, send_rate, get_rate)
         insert_sql = """
         INSERT INTO exchange_rates 
-        (reference_date, currency_code, currency_name, deal_bas_r, ttb, tts)
+        (reference_date, currency_code, currency_name, base_rate, send_rate, get_rate)
         VALUES (%s, %s, %s, %s, %s, %s)
         """
         
@@ -171,11 +152,11 @@ def save_to_mysql(df, date_str):
         for _, row in df.iterrows():
             data_list.append((
                 formatted_date,
-                row['통화코드'],
-                row['국가/통화명'],
-                row['매매기준율'],
-                row['전신환_받으실때'],
-                row['전신환_보내실때']
+                row['통화명'],        # currency_code
+                row['국가명'],        # currency_name
+                row['매매기준율'],     # base_rate
+                row['송금_보내실때'],   # send_rate
+                row['송금_받으실때']    # get_rate
             ))
         
         inserted_count = execute_many(insert_sql, data_list)
@@ -187,7 +168,6 @@ def save_to_mysql(df, date_str):
 if __name__ == "__main__":
     setup_logging()
     
-    # SSL 경고 무시 (필요시 사용)
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -197,6 +177,6 @@ if __name__ == "__main__":
     
     if rates_data is not None:
         process_and_save(rates_data, rates_date)
-        logging.info("🎉 모든 작업이 성공적으로 완료되었습니다.")
+        logging.info("🎉 작업 완료")
     else:
-        logging.warning("⚠️ 저장할 데이터가 없어 종료합니다.")
+        logging.warning("⚠️ 데이터 없음")
