@@ -135,7 +135,6 @@ def get_sql_answer(question):
     except Exception as e:
         return f"데이터 조회 중 오류가 발생했습니다: {e}"
 
-# --- 단독 실행 시 테스트 ---
 if __name__ == "__main__":
     print(f"Schema Info Check:\n{current_schema}\n")
     print("-" * 50)
