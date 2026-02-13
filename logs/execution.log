@@ -1,7 +1,7 @@
-﻿[2026-02-13 13:08:34,298] INFO: 🚀 환율 정보 업데이트 시작...
-[2026-02-13 13:08:34,298] INFO: 🔄 네이버 금융 데이터 요청 중...
-[2026-02-13 13:08:35,302] INFO: ✅ 파싱 성공! 데이터 58건을 찾았습니다.
-[2026-02-13 13:08:35,314] INFO: 💾 CSV 저장 완료: data/exchange_rates.csv
-[2026-02-13 13:08:35,314] INFO: 🔌 MySQL 저장 시작 (기준일: 2026-02-13)
-[2026-02-13 13:08:35,953] ERROR: ❌ DB 저장 오류: 'cryptography' package is required for sha256_password or caching_sha2_password auth methods
-[2026-02-13 13:08:35,953] INFO: 🎉 작업 완료
+﻿[2026-02-13 18:56:32,661] INFO: 🚀 환율 정보 업데이트 시작...
+[2026-02-13 18:56:32,661] INFO: 🔄 네이버 금융 데이터 요청 중...
+[2026-02-13 18:56:33,666] INFO: ✅ 파싱 성공! 데이터 58건을 찾았습니다.
+[2026-02-13 18:56:33,678] INFO: 💾 CSV 저장 완료: data/exchange_rates.csv
+[2026-02-13 18:56:33,678] INFO: 🔌 MySQL 저장 시작 (기준일: 2026-02-13)
+[2026-02-13 18:56:34,533] ERROR: ❌ DB 저장 오류: 'cryptography' package is required for sha256_password or caching_sha2_password auth methods
+[2026-02-13 18:56:34,533] INFO: 🎉 작업 완료
