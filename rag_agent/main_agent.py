@@ -15,7 +15,7 @@ from rag_agent.finrag_agent import get_rag_answer
 load_dotenv()
 
 # LLM 설정 (똑똑한 모델 추천)
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # 메모리 초기화
 memory = ConversationSummaryMemory(llm=llm)

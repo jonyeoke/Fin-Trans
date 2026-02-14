@@ -11,7 +11,7 @@ from utils.handle_sql import get_data
 load_dotenv()
 
 # 2. LLM 설정
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # --- [추가] 동적 스키마 조회 함수 ---
 # LangChain의 SQLDatabase 대신, 직접 현재 DB의 테이블 정보를 문자열로 만들어줍니다.

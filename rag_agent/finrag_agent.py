@@ -1,59 +1,50 @@
 import os
-import json
-import numpy as np
-import pandas as pd
 from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
-from utils.handle_sql import get_data  # DB 연결 모듈
+
+# [변경] ChromaDB 및 LangChain 관련 라이브러리 임포트
+from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
 
 # 1. 환경 설정
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 전역 변수
-df = None
-embedding_matrix = None
+# 전역 변수 (ChromaDB VectorStore)
+vectorstore = None
 
-# 프롬프트 파일 경로 설정
+# 경로 설정
 CURRENT_FILE_PATH = Path(__file__).resolve() 
 PROJECT_ROOT = CURRENT_FILE_PATH.parent.parent 
 PROMPT_PATH = PROJECT_ROOT / "utils" / "system_prompt.md" 
 
+# [변경] ChromaDB 데이터 경로 (../data/financial_terms)
+CHROMA_DB_PATH = PROJECT_ROOT / "data" / "financial_terms"
+COLLECTION_NAME = "financial_terms"
+
 def load_knowledge_base():
-    """DB 데이터 로딩"""
-    global df, embedding_matrix
-    if df is not None: return
+    """ChromaDB 연결 설정"""
+    global vectorstore
+    if vectorstore is not None: return
 
-    print("⏳ [RAG] 금융 지식 베이스 로딩 중...")
+    print("⏳ [RAG] ChromaDB 연결 중...")
     try:
-        rows = get_data("SELECT word, definition, embedding FROM terms")
-        df = pd.DataFrame(rows)
+        # 임베딩 모델 설정 (저장할 때 사용한 모델과 동일해야 함)
+        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
         
-        if df.empty:
-            print("⚠️ 데이터 없음.")
-            return
-
-        df['embedding'] = df['embedding'].apply(json.loads)
-        embedding_matrix = np.vstack(df['embedding'].values)
-        print(f"✅ 로딩 완료 ({len(df)}개)")
+        # 저장된 DB 로드
+        vectorstore = Chroma(
+            persist_directory=str(CHROMA_DB_PATH),
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME,
+            collection_metadata={"hnsw:space": "cosine"}
+        )
+        print(f"✅ ChromaDB 연결 완료 (경로: {CHROMA_DB_PATH})")
+        
     except Exception as e:
-        print(f"❌ 로딩 오류: {e}")
-        df = None
-
-def get_embedding(text):
-    return client.embeddings.create(input=[text], model="text-embedding-3-small").data[0].embedding
-
-def search_docs(query_text, top_k=3):
-    if df is None: return pd.DataFrame()
-    
-    query_vec = get_embedding(query_text)
-    similarities = np.dot(embedding_matrix, query_vec) / (
-        np.linalg.norm(embedding_matrix, axis=1) * np.linalg.norm(query_vec)
-    )
-    df['similarity'] = similarities
-    # 유사도 0.3 이상인 것만 필터링 (너무 엉뚱한 문서 제외)
-    return df[df['similarity'] >= 0.3].sort_values('similarity', ascending=False).head(top_k)
+        print(f"❌ ChromaDB 연결 오류: {e}")
+        vectorstore = None
 
 def read_prompt_file():
     """MD 파일에서 시스템 프롬프트 읽기"""
@@ -63,18 +54,26 @@ def read_prompt_file():
     except Exception:
         return "You are a helpful assistant." # 파일 없을 시 기본값
 
-# 🔥 핵심 함수: 인자에 original_query 추가
+# 🔥 핵심 함수: ChromaDB 검색으로 변경
+# finrag_agent.py 내부
+
 def get_rag_answer(korean_query, original_query=None):
-    if df is None: load_knowledge_base()
+    if vectorstore is None: load_knowledge_base()
 
+    relevant_docs = []
+    
     # 1. 문서 검색
-    relevant_docs = search_docs(korean_query, top_k=3)
-
-    # [추가] 검색된 문서 정보 출력
-    if not relevant_docs.empty:
+    if vectorstore:
+        results = vectorstore.similarity_search_with_score(korean_query, k=3)
+        relevant_docs = results
+    
+    # 검색된 문서 정보 출력 (디버깅용)
+    if relevant_docs:
         print("📑 [Retrieved Docs]:")
-        for idx, row in relevant_docs.iterrows():
-            print(f"   - {row['word']} (유사도: {row['similarity']:.3f})")
+        for doc, score in relevant_docs:
+            # 거리(Distance)를 유사도(Similarity)로 변환하여 출력 (1 - distance)
+            similarity = 1 - score
+            print(f"   - {doc.metadata.get('word', 'Unknown')} (유사도: {similarity:.4f})")
     else:
         print("⚠️ [Retrieved Docs]: 검색 결과 없음")
     
@@ -82,10 +81,24 @@ def get_rag_answer(korean_query, original_query=None):
     context_text = ""
     citations = []
     
-    if not relevant_docs.empty:
-        for idx, row in relevant_docs.iterrows():
-            context_text += f"Term: {row['word']}\nDefinition: {row['definition']}\n\n"
-            citations.append(f"- **{row['word']}**: {row['definition'][:50]}... (유사도: {row['similarity']:.2f})")
+    if relevant_docs:
+        for doc, score in relevant_docs:
+            word = doc.metadata.get("word", "Term")
+            raw_content = doc.page_content  # "더블딥: 경기침체가..." 형태
+            
+            # 🛠️ [수정 포인트] 내용에서 "단어: " 부분 제거하기
+            # 저장할 때 "Word: Definition" 형식으로 저장했으므로, 첫 번째 콜론(:) 뒤만 씁니다.
+            if ":" in raw_content:
+                definition = raw_content.split(":", 1)[1].strip()
+            else:
+                definition = raw_content
+            
+            # 컨텍스트 구성
+            context_text += f"Term: {word}\nDefinition: {definition}\n\n"
+            
+            # 출처 구성 (유사도 계산 포함)
+            similarity = 1 - score
+            citations.append(f"- **{word}**: {definition[:50]}... (유사도: {similarity:.2f})")
     else:
         context_text = "관련된 DB 정보가 없습니다. 일반적인 지식을 활용하세요."
         citations.append("- 검색된 관련 문서가 없습니다.")
@@ -96,17 +109,16 @@ def get_rag_answer(korean_query, original_query=None):
 
     # 4. LLM 호출
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[
             {"role": "system", "content": formatted_system_prompt},
             {"role": "user", "content": f"질문에 대해 초등학생 선생님처럼 핵심만 짧게 답변해 주세요: {korean_query}"}
-        ],
-        temperature=0.3
+        ]
     )
     
     ai_answer = response.choices[0].message.content.strip()
 
-    # 5. 최종 출력 포맷팅 (요청하신 부분)
+    # 5. 최종 출력 포맷팅
     final_output = f"""
 ### 🌏 질문 (Question)
 - **Original**: {original_query if original_query else korean_query}
@@ -124,4 +136,5 @@ def get_rag_answer(korean_query, original_query=None):
 
 if __name__ == "__main__":
     load_knowledge_base()
+    # 테스트 실행
     print(get_rag_answer("집을 구하려면 어떻게 해야해?", "How can I find a house?"))
