@@ -91,6 +91,9 @@ if 'user_name_real' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state['page'] = 'login'
 
+if 'allowed_views' not in st.session_state:
+    st.session_state['allowed_views'] = []
+
 if 'messages' not in st.session_state:
     st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다."}]
 if 'chat_sessions' not in st.session_state:
