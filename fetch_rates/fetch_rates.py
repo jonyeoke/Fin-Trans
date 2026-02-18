@@ -98,7 +98,7 @@ def process_and_save(df, date_str):
     if mask.any():
         logging.info(f"💡 {', '.join(target_currencies)} 통화의 단위를 100에서 1로 변환했습니다.")
 
-    df[numeric_cols] = df[numeric_cols].round(2)
+    df[numeric_cols] = df[numeric_cols].round(4)
     # 3. 기준일자 추가 및 컬럼 정리
     df['기준일자'] = date_str
     final_columns = ['기준일자', '통화명', '국가명', '매매기준율', '송금_보내실때', '송금_받으실때']
