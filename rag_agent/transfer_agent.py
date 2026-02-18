@@ -154,11 +154,11 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         return {"status": "ERROR", "message": "사용자를 찾을 수 없습니다."}
 
     # --------------------------------------------------
-    # 1. 비밀번호 입력 단계
+    # 1. PIN Code 입력 단계 (비밀번호 -> PIN Code 변경)
     # --------------------------------------------------
     if context.get("awaiting_password"):
 
-        stored_pin = get_user_password(username)  # ✅ 수정
+        stored_pin = get_user_password(username)
 
         if not stored_pin:
             return {"status": "ERROR", "message": "사용자 정보를 찾을 수 없습니다."}
@@ -170,11 +170,13 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             context["password_attempts"] = context.get("password_attempts", 0) + 1
 
             if context["password_attempts"] >= 5:
-                return {"status": "FAIL", "message": "비밀번호 5회 오류. 송금 실패."}
+                # [수정] 멘트 변경: 비밀번호 -> PIN Code
+                return {"status": "FAIL", "message": "PIN Code 5회 오류. 송금 실패."}
 
             return {
                 "status": "NEED_PASSWORD",
-                "message": f"비밀번호 오류. 남은 기회: {5 - context['password_attempts']}",
+                # [수정] 멘트 변경: 비밀번호 -> PIN Code
+                "message": f"PIN Code 오류. 남은 기회: {5 - context['password_attempts']}",
                 "context": context
             }
 
@@ -196,7 +198,8 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             context["currency"]
         )
 
-        return {"status": "SUCCESS", "message": "송금이 완료되었습니다."}
+        # [수정] 송금 완료 시 잔액(new_balance) 표기 추가
+        return {"status": "SUCCESS", "message": f"송금이 완료되었습니다. (잔액: {int(new_balance):,}원)"}
 
     # --------------------------------------------------
     # 2. 확인 단계
@@ -211,7 +214,8 @@ def process_transfer(question: str, username: str, context: dict | None = None):
 
         return {
             "status": "NEED_PASSWORD",
-            "message": "비밀번호를 입력해주세요.",
+            # [수정] 멘트 변경: 비밀번호 -> PIN Code
+            "message": "PIN Code를 입력해주세요.",
             "context": context
         }
     

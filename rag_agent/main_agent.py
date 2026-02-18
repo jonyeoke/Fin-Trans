@@ -137,21 +137,24 @@ def run_fintech_agent(question, username="test_user", transfer_context=None, all
             context=transfer_context
         )
 
-    # --- Step 2: 메모리를 활용한 질문 구체화 (Refinement) ---
+    # --- Step 2: 질문 구체화 (Refinement) - 무조건 실행 ---
     current_history = GLOBAL_CHAT_CONTEXT["summary"]
-    refined_query = korean_query
     
-    if current_history:
-        print(f"🧠 [Memory Summary]: {current_history}")
-        refined_query = refinement_chain.invoke({
-            "history": current_history,
-            "question": korean_query
-        }).strip()
-        
-        if refined_query != korean_query:
-            print(f"✨ [Step 2] 질문 보정: '{korean_query}' -> '{refined_query}'")
+    # history가 비어있을 경우 명시적인 텍스트 전달 (LLM 혼란 방지)
+    history_context = current_history if current_history else "이전 대화 기록 없음(No previous conversation history)."
+
+    print(f"🧠 [Memory Summary]: {history_context}")
+
+    # 무조건 실행
+    refined_query = refinement_chain.invoke({
+        "history": history_context,
+        "question": korean_query
+    }).strip()
+    
+    if refined_query != korean_query:
+        print(f"✨ [Step 2] 질문 보정: '{korean_query}' -> '{refined_query}'")
     else:
-        print("✨ [Step 2] 보정 생략 (이전 대화 없음)")
+        print(f"✨ [Step 2] 질문 보정 없음 (변화 없음)")
 
     # --- Step 3: 의도 파악 (Router) ---
     category = router_chain.invoke({"question": refined_query}).strip()
