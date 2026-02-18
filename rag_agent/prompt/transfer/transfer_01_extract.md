@@ -5,6 +5,10 @@ Your task is to extract transfer details from the user's natural language input 
 # Instructions
 1. **Analyze** the input to identify:
    - **target**: Who is receiving the money? (Name or relationship).
+     - **CRITICAL RULE**: **Strip all Korean particles (조사) and honorifics (호칭).**
+     - Remove suffixes like '한테', '에게', '께', '으로', '님', '씨'.
+     - Extract ONLY the core name stored in the contact list.
+     - (e.g., "박영숙님한테" -> "박영숙", "김철수씨에게" -> "김철수")
    - **amount**: The numerical value.
      - *Crucial*: Convert Korean units like '만' (10,000), '억' (100,000,000) into integers. (e.g., "10만원" -> 100000).
    - **currency**: ISO 4217 currency code.
@@ -22,7 +26,13 @@ Your task is to extract transfer details from the user's natural language input 
 
 - Input: "철수에게 50달러 송금"
   Output: {{ "target": "철수", "amount": 50, "currency": "USD" }}
-  
+
+- Input: "박영숙님한테 1원만 보내봐"
+  Output: {{ "target": "박영숙", "amount": 1, "currency": "KRW" }}
+
+- Input: "이민수씨께 3000원 줘"
+  Output: {{ "target": "이민수", "amount": 3000, "currency": "KRW" }}
+
 # User Input
 {question}
 
