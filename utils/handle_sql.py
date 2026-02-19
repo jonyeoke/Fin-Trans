@@ -1,20 +1,28 @@
 import pymysql
 import os
 from dotenv import load_dotenv
+from dbutils.pooled_db import PooledDB
 
 load_dotenv()
 
-# DB 연결 정보를 가져오는 내부 함수 (DRY 원칙)
-def _get_connection():
-    return pymysql.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        db=os.getenv('DB_NAME'),
-        port=int(os.getenv('DB_PORT', 3306)),
-        charset='utf8mb4'
-    )
+# [수정] 전역 풀 생성 (싱글톤 패턴 효과)
+POOL = PooledDB(
+    creator=pymysql,
+    mincached=2,
+    maxcached=5,
+    maxconnections=10,
+    blocking=True,
+    host=os.getenv('DB_HOST'),
+    user=os.getenv('DB_USER'),
+    password=os.getenv('DB_PASSWORD'),
+    db=os.getenv('DB_NAME'),
+    port=int(os.getenv('DB_PORT', 3306)),
+    charset='utf8mb4'
+)
 
+def _get_connection():
+    # [수정] 풀에서 연결을 빌려옴 (매우 빠름)
+    return POOL.connection()
 def get_data(query, args=None):
     """SELECT 전용: 결과를 반환함"""
     conn = _get_connection()

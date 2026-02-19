@@ -38,15 +38,32 @@ def get_schema_info(allowed_views: list):
     try:
         if not allowed_views:
             return "No accessible tables provided."
+            
+        # [수정] IN 절을 사용하여 한 번에 모든 컬럼 정보 조회
+        placeholders = ','.join(['%s'] * len(allowed_views))
+        sql = f"""
+            SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME IN ({placeholders})
+            AND TABLE_SCHEMA = DATABASE()
+            ORDER BY TABLE_NAME, ORDINAL_POSITION
+        """
+        
+        # 한 번의 연결로 해결
+        results = get_data(sql, allowed_views)
+        
+        # 메모리 상에서 텍스트 조합
+        schema_dict = {}
+        for row in results:
+            t_name = row['TABLE_NAME']
+            if t_name not in schema_dict:
+                schema_dict[t_name] = []
+            schema_dict[t_name].append(f"- {row['COLUMN_NAME']} ({row['DATA_TYPE']})")
+            
         schema_text = ""
-        for view_name in allowed_views:
-            schema_text += f"\n[Table/View: {view_name}]\n"
-            columns = get_data(f"DESCRIBE {view_name}")
-            if columns:
-                for col in columns:
-                    schema_text += f"- {col['Field']} ({col['Type']})\n"
-            else:
-                schema_text += "- (No columns found or permission denied)\n"
+        for t_name, cols in schema_dict.items():
+            schema_text += f"\n[Table/View: {t_name}]\n" + "\n".join(cols) + "\n"
+            
         return schema_text.strip()
     except Exception as e:
         return f"스키마 조회 실패: {e}"
