@@ -7,3 +7,4 @@ __pycache__/
 *.txt
 !requirements.txt
 *.pyc
+/logs/chat_history.md

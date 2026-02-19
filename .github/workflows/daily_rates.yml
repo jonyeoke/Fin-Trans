@@ -26,7 +26,7 @@ jobs:
 
       - name: 라이브러리 설치
         run: |
-          pip install requests pandas python-dotenv pymysql lxml
+          pip install requests pandas python-dotenv pymysql lxml dbutils
 
       - name: 환율 스크립트 실행
         env:
