@@ -151,6 +151,7 @@ def login_page():
                                 target_hash = target_hash.encode('utf-8')
                             
                             if bcrypt.checkpw(password_input.encode('utf-8'), target_hash):
+                                reset_global_context()
                                 st.session_state['logged_in'] = True
                                 st.session_state['current_user'] = username
                                 st.session_state['user_name_real'] = korean_name
