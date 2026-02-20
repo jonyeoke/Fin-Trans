@@ -67,23 +67,6 @@ def local_css():
         }        
         [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
         h1, h2, h3 { color: #1E293B; }
-        
-        /* [요구사항 반영] 1. 아바타를 감싸는 부모 컨테이너 크기 자체를 키움 */
-        [data-testid="stChatMessageAvatar"] {
-            width: 80px !important;      /* 100px은 채팅창에서 너무 클 수 있어 80px로 예시를 작성했습니다. 원하시면 100px로 변경하세요. */
-            height: 80px !important;
-            min-width: 80px !important;  /* 주변 요소에 의해 찌그러지는 것 방지 */
-        }
-
-        /* [요구사항 반영] 2. 컨테이너 내부의 이미지는 부모 크기(100%)에 맞게 채움 */
-        [data-testid="stChatMessageAvatar"] img,
-        [data-testid="stChatMessageAvatar"] svg {
-            width: 100% !important;  
-            height: 100% !important; 
-            max-width: 100% !important;
-            border-radius: 50%;
-            object-fit: cover;           /* 이미지가 비율에 맞게 예쁘게 채워지도록 설정 */
-        }
     </style>
     """, unsafe_allow_html=True)
 
