@@ -20,53 +20,221 @@ st.set_page_config(page_title="BeoTT Buddy", page_icon="img/버디_기본.png", 
 def local_css():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-        html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        html, body, [class*="css"] { 
+            font-family: 'Poppins', sans-serif; 
+        }
+        
+        /* 배경 흰색으로 설정 */
         .stApp {
-            background-color: #F8FAFC;
-            background-image: radial-gradient(#E0E7FF 1px, transparent 1px);
-            background-size: 20px 20px;
+            background-color: #FFFFFF;
+            background-image: none;
         }
+        
+        /* 메인 컨테이너 스타일 */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        
+        /* 폼 스타일 개선 */
         [data-testid="stForm"] {
-            background-color: rgba(255, 255, 255, 0.95);
-            padding: 3rem;
-            border-radius: 24px;
-            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05);
-            border: 1px solid #EEF2FF;
-            backdrop-filter: blur(10px);
+            background-color: #FFFFFF;
+            padding: 3.5rem;
+            border-radius: 28px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid #E2E8F0;
         }
+        
+        /* 입력 필드 스타일 개선 */
         div[data-baseweb="input"] > div {
-            background-color: #F1F5F9;
-            border-radius: 16px;
-            border: 2px solid transparent;
-            padding: 5px;
+            background-color: #F8FAFC;
+            border-radius: 18px;
+            border: 2px solid #E2E8F0;
+            padding: 8px;
+            transition: all 0.3s ease;
         }
         div[data-baseweb="input"] > div:focus-within {
             background-color: #FFFFFF;
-            border: 2px solid #6366F1;
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+            border: 2px solid #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
         }
+        
+        /* 버튼 스타일 개선 - 밝은 톤 */
         div.stButton > button {
-            background: #FFFFFF;
-            color: #64748B !important;
-            border: 1px solid #CBD5E1 !important;
-            padding: 0.5rem 1rem !important;
+            background-color: #818cf8 !important;
+            color: #FFFFFF !important;
+            border: 2px solid #818cf8 !important;
+            padding: 0.75rem 1.5rem !important;
             width: 100%;
+            border-radius: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(129, 140, 248, 0.25);
         }
         div.stButton > button:hover {
-            background: #FFFFFF !important;
-            color: #64748B !important;
+            background-color: #6366f1 !important;
+            border-color: #6366f1 !important;
+            color: #FFFFFF !important;
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 8px 16px rgba(129, 140, 248, 0.35);
         }
+        
         /* 보조 버튼 스타일 */
         button[kind="secondary"] {
-            background: #FFFFFF;
-            border: 1px solid #CBD5E1 !important;
+            background-color: #FFFFFF !important;
+            border: 2px solid #E2E8F0 !important;
             color: #64748B !important;
-        }        
-        [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
-        h1, h2, h3 { color: #1E293B; }
+            border-radius: 14px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        button[kind="secondary"]:hover {
+            background-color: #F8FAFC !important;
+            border-color: #818cf8 !important;
+            color: #818cf8 !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(129, 140, 248, 0.15);
+        }
+        
+        /* Primary 버튼 스타일 */
+        button[kind="primary"] {
+            background-color: #818cf8 !important;
+            color: #FFFFFF !important;
+            border: 2px solid #818cf8 !important;
+        }
+        button[kind="primary"]:hover {
+            background-color: #6366f1 !important;
+            border-color: #6366f1 !important;
+            color: #FFFFFF !important;
+        }
+        
+        /* 사이드바 스타일 개선 */
+        [data-testid="stSidebar"] { 
+            background-color: #FFFFFF;
+            border-right: 2px solid #E2E8F0;
+        }
+        
+        /* 제목 스타일 */
+        h1, h2, h3, h4, h5, h6 { 
+            color: #1E293B !important;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        /* 아바타 크기 관련 CSS 제거 - Streamlit 기본 크기 사용 */
+        
+        /* 사용자 메시지 스타일 - 단순화 */
+        [data-testid="stChatMessage"][data-message-author="user"] {
+            background-color: #667eea !important;
+            border-radius: 18px 18px 4px 18px !important;
+            padding: 0.75rem 1rem !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
+            max-width: 70% !important;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2) !important;
+        }
+        
+        /* 사용자 메시지 텍스트 색상 */
+        [data-testid="stChatMessage"][data-message-author="user"] p,
+        [data-testid="stChatMessage"][data-message-author="user"] div,
+        [data-testid="stChatMessage"][data-message-author="user"] span {
+            color: #FFFFFF !important;
+        }
+        
+        /* 어시스턴트 메시지 스타일 - 단순화 */
+        [data-testid="stChatMessage"][data-message-author="assistant"] {
+            background-color: #F1F5F9 !important;
+            border-radius: 18px 18px 18px 4px !important;
+            padding: 0.75rem 1rem !important;
+            margin-left: 0 !important;
+            margin-right: auto !important;
+            max-width: 70% !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+            border: 1px solid #E2E8F0 !important;
+        }
+        
+        /* 어시스턴트 메시지 텍스트 색상 */
+        [data-testid="stChatMessage"][data-message-author="assistant"] p,
+        [data-testid="stChatMessage"][data-message-author="assistant"] div,
+        [data-testid="stChatMessage"][data-message-author="assistant"] span {
+            color: #1E293B !important;
+        }
+        
+        /* 채팅 입력 필드 스타일 */
+        [data-testid="stChatInput"] {
+            background-color: #FFFFFF;
+            border-radius: 20px;
+            padding: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 2px solid #E2E8F0;
+        }
+        
+        [data-testid="stChatInput"]:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        [data-testid="stChatInput"] textarea {
+            color: #1E293B !important;
+        }
+        
+        /* 스크롤바 스타일 */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background-color: #F1F5F9;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #CBD5E1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #94A3B8;
+        }
+        
+        /* 캡션 스타일 */
+        .stCaption {
+            color: rgba(100, 116, 139, 0.8);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        
+        /* 모든 텍스트 가독성 개선 */
+        p, span, div, label {
+            color: #1E293B !important;
+        }
+        
+        /* 입력 필드 텍스트 색상 */
+        input, textarea {
+            color: #1E293B !important;
+        }
+        
+        /* 라벨 색상 */
+        label {
+            color: #334155 !important;
+            font-weight: 500;
+        }
+        
+        /* 스피너 스타일 */
+        .stSpinner > div {
+            border-color: #667eea transparent transparent transparent !important;
+        }
+        
+        /* 에러 메시지 스타일 */
+        .stAlert {
+            border-radius: 16px;
+            border-left: 4px solid #ef4444;
+        }
+        
+        /* 성공 메시지 스타일 */
+        [data-baseweb="notification"] {
+            border-radius: 16px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -142,7 +310,16 @@ def login_page():
 
             with col_img_2:
                 st.image("img/버디_기본.png", width=400)
-            st.markdown(f"<h2 style='text-align: center; color: #1E293B;'>{mode_title}</h2>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <h2 style='
+                    text-align: center; 
+                    color: #667eea;
+                    font-weight: 700;
+                    font-size: 2.5rem;
+                    margin: 1rem 0;
+                    letter-spacing: -1px;
+                '>{mode_title}</h2>
+            """, unsafe_allow_html=True)
             
             username = st.text_input("아이디 (Username)", placeholder="example@woorifis.com")
             password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
@@ -201,7 +378,16 @@ def register_page():
     
     with col2:
         with st.form("register_form"):
-            st.markdown("<h2 style='text-align: center;'>회원가입</h2>", unsafe_allow_html=True)
+            st.markdown("""
+                <h2 style='
+                    text-align: center;
+                    color: #667eea;
+                    font-weight: 700;
+                    font-size: 2.2rem;
+                    margin: 1rem 0;
+                    letter-spacing: -1px;
+                '>회원가입</h2>
+            """, unsafe_allow_html=True)
             
             new_user = st.text_input("아이디 (Username)", placeholder="unique_id")
             new_name = st.text_input("이름 (Korean Name)", placeholder="홍길동")
@@ -259,10 +445,27 @@ def register_page():
 def chat_page():
     with st.sidebar:
         st.markdown(f"""
-        <div style='background-color: #F1F5F9; padding: 15px; border-radius: 15px; margin-bottom: 20px;'>
-            <h3 style='margin:0; color: #1E293B; font-size: 1.2rem;'>👋 반가워요!</h3>
-            <p style='margin:0; color: #64748B; font-size: 0.9rem;'>
-                <b>{st.session_state.get('user_name_real', '사용자')}</b>님
+        <div style='
+            background-color: #F8FAFC;
+            padding: 20px;
+            border-radius: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #E2E8F0;
+        '>
+            <h3 style='
+                margin:0 0 10px 0; 
+                color: #667eea; 
+                font-size: 1.3rem;
+                font-weight: 700;
+            '>👋 반가워요!</h3>
+            <p style='
+                margin:0; 
+                color: #475569; 
+                font-size: 1rem;
+                font-weight: 500;
+            '>
+                <b style='color: #1E293B;'>{st.session_state.get('user_name_real', '사용자')}</b>님
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -298,7 +501,8 @@ def chat_page():
             with st.chat_message(message["role"], avatar="img/버디_기본.png"):
                 st.markdown(message["content"])
         else:
-            with st.chat_message(message["role"]):
+            # 사용자 아바타 추가 (이모지 또는 기본 아이콘)
+            with st.chat_message(message["role"], avatar="👤"):
                 st.markdown(message["content"])
 
     # 2. 확인 버튼 렌더링
@@ -329,18 +533,19 @@ def chat_page():
             st.session_state['messages'].append({"role": "assistant", "content": final_msg})
             st.rerun()
 
-        _, col1, col2, _ = st.columns([3, 1, 1, 3])
+        st.markdown("<br>", unsafe_allow_html=True)
+        _, col1, col2, _ = st.columns([2.5, 1.2, 1.2, 2.5])
         with col1:
-            if st.button("✅", key="confirm_yes", type="primary", use_container_width=True):
+            if st.button("✅ 확인", key="confirm_yes", type="primary", use_container_width=True):
                 handle_confirm("__YES__")
         with col2:
-            if st.button("❌", key="confirm_no", use_container_width=True):
+            if st.button("❌ 취소", key="confirm_no", use_container_width=True):
                 handle_confirm("__NO__")
 
     # 3. 사용자 입력 처리
     if user_input := st.chat_input("메시지를 입력해 주세요..."):
         st.session_state['messages'].append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
+        with st.chat_message("user", avatar="👤"):
             st.markdown(user_input)
 
         # [요구사항 반영] 1단계: '생각 중' 상태를 보여줄 임시 컨테이너 생성
