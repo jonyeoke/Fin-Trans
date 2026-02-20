@@ -37,13 +37,11 @@ def read_prompt(filename: str) -> str:
 # [NEW] 로그 출력 유틸리티 함수
 # ---------------------------------------------------------
 def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
-    """
-    터미널에 Timestamp, 진행 상태, 소요 시간, 추가 정보(생성된 SQL 등)를 출력하는 헬퍼 함수
-    """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     
     if status == "start":
-        print(f"[{now}] ⏳ [{step_name}] 시작...")
+        # flush=True 추가
+        print(f"[{now}] ⏳ [{step_name}] 시작...", flush=True) 
         return time.time()
         
     elif status == "end" and start_time is not None:
@@ -51,7 +49,9 @@ def print_log(step_name: str, status: str, start_time: float = None, extra_info:
         log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
         if extra_info:
             log_msg += f"\n   👉 {extra_info}"
-        print(log_msg)
+        
+        # flush=True 추가
+        print(log_msg, flush=True) 
         return elapsed
 
 # ---------------------------------------------------------
