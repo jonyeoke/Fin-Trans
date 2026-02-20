@@ -16,7 +16,7 @@ from utils.handle_sql import get_data, execute_query
 # 1. 환경 설정
 load_dotenv()
 # 온도가 0이어야 추출 및 매칭이 일관적입니다.
-llm = ChatOpenAI(model="gpt-4o-mini",temperature=0)
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
 # [설정] 프롬프트 경로 (필요 시 유지, 여기서는 코드 내장 프롬프트 사용)
