@@ -2,11 +2,12 @@ import streamlit as st
 import time
 import bcrypt
 from dotenv import load_dotenv
+import os
+import sys
+import subprocess
 
 from utils.handle_sql import get_data, execute_query
-# [수정] reset_global_context 추가 임포트 (백엔드 메모리 초기화용)
 from rag_agent.main_agent import run_fintech_agent, reset_global_context
-# [수정] load_knowledge_base 추가 임포트 (DB 캐싱용)
 from rag_agent.finrag_agent import load_knowledge_base
 
 load_dotenv()
@@ -71,9 +72,32 @@ def local_css():
 
 local_css()
 
-# [수정] ChromaDB 연결 캐싱 (앱 실행 시 한 번만 연결)
+# [수정] ChromaDB 연결 캐싱 및 초기 데이터 구축
 @st.cache_resource
 def init_chroma_connection():
+    target_dir = "data/financial_terms/"
+    needs_setup = False
+    
+    # 1. 폴더 존재 여부 및 내부 파일 검사
+    if not os.path.exists(target_dir):
+        needs_setup = True
+    else:
+        files = os.listdir(target_dir)
+        # 폴더가 비어있거나, 초기화로 인해 chroma.sqlite3 파일 하나만 생성된 경우
+        if len(files) == 0 or (len(files) == 1 and files[0] == "chroma.sqlite3"):
+            needs_setup = True
+            
+    # 2. 조건에 부합하면 DB 구축 스크립트 실행
+    if needs_setup:
+        print(f"DB 데이터가 비어있어 'utils/set_chromaDB.py' 스크립트를 실행합니다.")
+        try:
+            subprocess.run([sys.executable, "utils/set_chromaDB.py"], check=True)
+            print("DB 초기화 및 데이터 임베딩이 성공적으로 완료되었습니다.")
+        except subprocess.CalledProcessError as e:
+            print(f"DB 초기화 중 오류가 발생했습니다: {e}")
+            return False
+            
+    # 3. 지식 베이스 로드 (이 시점에는 확실히 데이터가 존재함)
     load_knowledge_base()
     return True
 
@@ -352,7 +376,7 @@ def chat_page():
                         else:
                             st.session_state["transfer_context"] = None
 
-                        # ★ 마지막 결과 저장 (버튼 렌더링 판단용)
+                        # ★ 마지막 결과 저장 (버튼 렌더링 판단용)  
                         st.session_state["last_result"] = result
                         final_response = result.get("message", "")
 

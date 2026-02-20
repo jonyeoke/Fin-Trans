@@ -14,7 +14,7 @@ from utils.handle_sql import get_data
 load_dotenv()
 
 # 2. LLM 설정
-llm = ChatOpenAI(model="gpt-5-mini")
+llm = ChatOpenAI(model="gpt-4o-mini",temperature=0)
 
 # ---------------------------------------------------------
 # [설정] 프롬프트 경로 설정 및 로딩 함수

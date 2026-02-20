@@ -5,7 +5,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 
-from utils.handle_sql import execute_query, execute_many
+from handle_sql import execute_query, execute_many
 
 print("🚀 [최종] 금융 용어 PDF -> MySQL DB 적재 시작 (Strict Match Mode)...")
 

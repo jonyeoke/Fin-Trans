@@ -4,7 +4,9 @@ venv/
 env/
 __pycache__/
 /utils/__pycache__/
+/rag_agent/__pycache__/
 *.txt
 !requirements.txt
 *.pyc
 /logs/chat_history.md
+/data/financial_terms/

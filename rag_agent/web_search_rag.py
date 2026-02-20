@@ -12,7 +12,7 @@ from langgraph.graph import StateGraph, START, END
 load_dotenv()
 
 # LLM 설정 (일관성을 위해 ChatOpenAI 사용)
-llm = ChatOpenAI(model="gpt-5-mini", temperature=0)
+llm = ChatOpenAI(model="gpt-4o-mini",temperature=0)
 
 # ---------------------------------------------------------
 # 프롬프트
