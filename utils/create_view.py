@@ -32,7 +32,7 @@ def create_user_views(username: str):
     # 2️⃣ 사용자 계좌 정보
     accounts_view_sql = f"""
         CREATE OR REPLACE VIEW current_user_accounts AS
-        SELECT account_id, balance, is_primary
+        SELECT account_id, balance, is_primary, bank_name, bank_code, account_number,account_alias
         FROM accounts
         WHERE user_id = {user_id}
     """

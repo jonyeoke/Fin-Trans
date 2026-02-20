@@ -15,6 +15,7 @@ Your task is to extract transfer details from the user's natural language input 
      - "원" -> "KRW"
      - "달러", "$" -> "USD"
      - "엔", "¥" -> "JPY"
+     - "동" -> "VND"
      - If omitted but amount implies KRW, default to "KRW".
 
 2. **Output Format**: Return ONLY a raw JSON object.
