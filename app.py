@@ -15,7 +15,7 @@ load_dotenv()
 # ==========================================
 # 1. 페이지 설정 및 디자인
 # ==========================================
-st.set_page_config(page_title="Woori AI Assistant", page_icon="img/덤보.png", layout="centered")
+st.set_page_config(page_title="BeoTT Buddy", page_icon="img/버디_기본.png", layout="centered")
 
 def local_css():
     st.markdown("""
@@ -54,8 +54,8 @@ def local_css():
             width: 100%;
         }
         div.stButton > button:hover {
-            background: #FFFFFF !important;   /* ← 추가: 빨간색 방지 */
-            color: #64748B !important;        /* ← 추가: 글자색 유지 */
+            background: #FFFFFF !important;
+            color: #64748B !important;
             transform: translateY(-2px);
             box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.4);
         }
@@ -67,27 +67,41 @@ def local_css():
         }        
         [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
         h1, h2, h3 { color: #1E293B; }
+        
+        /* [요구사항 반영] 1. 아바타를 감싸는 부모 컨테이너 크기 자체를 키움 */
+        [data-testid="stChatMessageAvatar"] {
+            width: 80px !important;      /* 100px은 채팅창에서 너무 클 수 있어 80px로 예시를 작성했습니다. 원하시면 100px로 변경하세요. */
+            height: 80px !important;
+            min-width: 80px !important;  /* 주변 요소에 의해 찌그러지는 것 방지 */
+        }
+
+        /* [요구사항 반영] 2. 컨테이너 내부의 이미지는 부모 크기(100%)에 맞게 채움 */
+        [data-testid="stChatMessageAvatar"] img,
+        [data-testid="stChatMessageAvatar"] svg {
+            width: 100% !important;  
+            height: 100% !important; 
+            max-width: 100% !important;
+            border-radius: 50%;
+            object-fit: cover;           /* 이미지가 비율에 맞게 예쁘게 채워지도록 설정 */
+        }
     </style>
     """, unsafe_allow_html=True)
 
 local_css()
 
-# [수정] ChromaDB 연결 캐싱 및 초기 데이터 구축
+# ChromaDB 연결 캐싱 및 초기 데이터 구축
 @st.cache_resource
 def init_chroma_connection():
     target_dir = "data/financial_terms/"
     needs_setup = False
     
-    # 1. 폴더 존재 여부 및 내부 파일 검사
     if not os.path.exists(target_dir):
         needs_setup = True
     else:
         files = os.listdir(target_dir)
-        # 폴더가 비어있거나, 초기화로 인해 chroma.sqlite3 파일 하나만 생성된 경우
         if len(files) == 0 or (len(files) == 1 and files[0] == "chroma.sqlite3"):
             needs_setup = True
             
-    # 2. 조건에 부합하면 DB 구축 스크립트 실행
     if needs_setup:
         print(f"DB 데이터가 비어있어 'utils/set_chromaDB.py' 스크립트를 실행합니다.")
         try:
@@ -97,7 +111,6 @@ def init_chroma_connection():
             print(f"DB 초기화 중 오류가 발생했습니다: {e}")
             return False
             
-    # 3. 지식 베이스 로드 (이 시점에는 확실히 데이터가 존재함)
     load_knowledge_base()
     return True
 
@@ -118,7 +131,7 @@ if 'allowed_views' not in st.session_state:
     st.session_state['allowed_views'] = []
 
 if 'messages' not in st.session_state:
-    st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다."}]
+    st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
 if 'chat_sessions' not in st.session_state:
     st.session_state['chat_sessions'] = []
 if 'user_input_text' not in st.session_state:
@@ -139,14 +152,14 @@ def login_page():
     col1, col2, col3 = st.columns([1, 5, 1]) 
     
     with col2:
-        # 로그인 방식에 따라 제목과 입력창 변경
-        mode_title = "Password"
+        mode_title = "BeoTT"
         
         with st.form("login_form"):
-            col1, col2, col3 = st.columns([2,1,2])
-            with col2:
-                st.image("img/덤보.png", width=140)
-            st.markdown(f"<h2 style='text-align: center; color: #1E293B;'>{mode_title} Login</h2>", unsafe_allow_html=True)
+            col_img_1, col_img_2, col_img_3 = st.columns([1.5, 2, 1.5]) 
+
+            with col_img_2:
+                st.image("img/버디_기본.png", width=400)
+            st.markdown(f"<h2 style='text-align: center; color: #1E293B;'>{mode_title}</h2>", unsafe_allow_html=True)
             
             username = st.text_input("아이디 (Username)", placeholder="example@woorifis.com")
             password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
@@ -156,18 +169,15 @@ def login_page():
             
             if submitted:
                 try:
-                    # 두 가지 비밀번호 모두 조회 (pin_code, password)
                     sql = "SELECT pin_code, password, korean_name FROM members WHERE username = %s"
                     user_data = get_data(sql, (username,))
                     
                     if user_data:
-                        db_pin = user_data[0]['pin_code']
                         db_pw = user_data[0]['password']
                         korean_name = user_data[0]['korean_name']
                         
                         target_hash = db_pw
                         
-                        # DB값이 없을 경우(기존 데이터 등) 방어 로직
                         if not target_hash:
                              st.error("해당 로그인 방식에 대한 비밀번호가 설정되지 않았습니다.")
                         else:
@@ -180,13 +190,9 @@ def login_page():
                                 st.session_state['current_user'] = username
                                 st.session_state['user_name_real'] = korean_name
                                 
-                                # [수정] 로그인 성공 시 이전 세션 데이터 확실하게 초기화
-                                st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다."}]
+                                st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
                                 st.session_state["transfer_context"] = None
                                 
-                                if "transfer_context" not in st.session_state:
-                                    st.session_state["transfer_context"] = None
-
                                 from utils.create_view import create_user_views
                                 view_names = create_user_views(username)
                                 st.session_state['allowed_views'] = view_names
@@ -200,7 +206,6 @@ def login_page():
                 except Exception as e:
                     st.error(f"시스템 오류: {e}")
 
-        # 로그인 방식 전환 버튼 및 회원가입 버튼
         st.write("")
         if st.button("✨ 회원가입", type="secondary", use_container_width=True):
             st.session_state['page'] = 'register'
@@ -233,7 +238,6 @@ def register_page():
             submit = st.form_submit_button("가입 완료")
             
             if submit:
-                # 유효성 검사
                 if not all([new_user, new_name, new_pw, new_pin]):
                     st.error("모든 필수 정보를 입력해주세요.")
                 elif new_pw != new_pw_cf:
@@ -248,11 +252,9 @@ def register_page():
                         if get_data(check_sql, (new_user,)):
                             st.error("이미 존재하는 아이디입니다.")
                         else:
-                            # 비밀번호 해싱 (두 개 다 수행)
                             hashed_pw = bcrypt.hashpw(new_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             hashed_pin = bcrypt.hashpw(new_pin.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             
-                            # DB Insert (password, pin_code 둘 다 저장)
                             insert_sql = """
                                 INSERT INTO members (username, korean_name, password, pin_code, preferred_language)
                                 VALUES (%s, %s, %s, %s, %s)
@@ -272,7 +274,6 @@ def register_page():
             st.rerun()
 
 def chat_page():
-    # --- 사이드바 ---
     with st.sidebar:
         st.markdown(f"""
         <div style='background-color: #F1F5F9; padding: 15px; border-radius: 15px; margin-bottom: 20px;'>
@@ -284,7 +285,7 @@ def chat_page():
         """, unsafe_allow_html=True)
 
         if st.button("✨ 새 대화 시작", use_container_width=True):
-            st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다. \n금융 업무부터 일상 대화까지 무엇이든 도와드릴게요."}]
+            st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
             st.session_state["transfer_context"] = None
             st.session_state["last_result"] = None
             st.rerun()
@@ -292,15 +293,13 @@ def chat_page():
         st.markdown("<div style='margin-top: auto;'></div>", unsafe_allow_html=True)
         st.markdown("---")
         if st.button("로그아웃", use_container_width=True):
-            # [수정] 백엔드 메모리 초기화
             reset_global_context()
             
             st.session_state['logged_in'] = False
             st.session_state['current_user'] = None
             st.session_state['user_name_real'] = None
             
-            # [수정] 프론트엔드 대화 내역 및 컨텍스트 초기화
-            st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! **우리 A.I 에이전트**입니다."}]
+            st.session_state['messages'] = [{"role": "assistant", "content": "안녕하세요! 저는 당신의 금융 친구 버디에요! 무엇을 도와드릴까요?"}]
             st.session_state['transfer_context'] = None
             st.session_state['chat_sessions'] = []
             st.session_state['allowed_views'] = []
@@ -308,15 +307,18 @@ def chat_page():
             st.session_state['page'] = 'login'
             st.rerun()
 
-    # --- 메인 채팅 화면 ---
-    st.caption("🔒 Woori AI Service | Powered by Fin-Agent")
+    st.caption("🔒 BeoTT Service | Powered by Buddy-Agent")
 
-    # 1. 기존 메시지 렌더링
+    # 1. 기존 메시지 렌더링 (아바타 로직 추가)
     for message in st.session_state['messages']:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        if message["role"] == "assistant":
+            with st.chat_message(message["role"], avatar="img/버디_기본.png"):
+                st.markdown(message["content"])
+        else:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-    # ★ 2. 확인 버튼 렌더링 (메시지 렌더링 직후, chat_input 이전)
+    # 2. 확인 버튼 렌더링
     if (
         st.session_state.get("last_result") and
         st.session_state["last_result"].get("ui_type") == "confirm_buttons"
@@ -358,10 +360,12 @@ def chat_page():
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-
-            with st.spinner("AI가 답변을 생성하고 있습니다..."):
+        # [요구사항 반영] 1단계: '생각 중' 상태를 보여줄 임시 컨테이너 생성
+        thinking_placeholder = st.empty()
+        
+        # [요구사항 반영] 2단계: 임시 컨테이너에 '생각' 아바타 적용
+        with thinking_placeholder.chat_message("assistant", avatar="img/버디_생각.png"):
+            with st.spinner("버디가 답변을 생성하고 있어요..."):
                 try:
                     result = run_fintech_agent(
                         user_input,
@@ -376,7 +380,6 @@ def chat_page():
                         else:
                             st.session_state["transfer_context"] = None
 
-                        # ★ 마지막 결과 저장 (버튼 렌더링 판단용)  
                         st.session_state["last_result"] = result
                         final_response = result.get("message", "")
 
@@ -389,9 +392,16 @@ def chat_page():
                         final_response = result
 
                 except Exception as e:
-                    final_response = f"죄송합니다. 오류가 발생했습니다: {e}"
+                    final_response = f"미안해요, 오류가 발생했어요: {e}"
                     st.session_state["last_result"] = None
 
+        # [요구사항 반영] 3단계: 답변 생성이 완료되면 '생각 중' 임시 컨테이너 완전히 삭제
+        thinking_placeholder.empty()
+
+        # [요구사항 반영] 4단계: '기본' 아바타로 최종 결과 출력 블록 렌더링
+        with st.chat_message("assistant", avatar="img/버디_답변.png"):
+            message_placeholder = st.empty()
+            
             # 스트리밍 효과
             streamed_text = ""
             for char in final_response:
@@ -402,10 +412,10 @@ def chat_page():
             message_placeholder.markdown(streamed_text)
             st.session_state['messages'].append({"role": "assistant", "content": streamed_text})
 
-        # ★ 버튼이 필요한 경우 즉시 rerun해서 버튼을 렌더링
         if st.session_state.get("last_result", {}) and \
            st.session_state["last_result"].get("ui_type") == "confirm_buttons":
             st.rerun()            
+
 # ==========================================
 # 4. 실행 로직
 # ==========================================
