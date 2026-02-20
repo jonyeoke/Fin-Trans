@@ -1,4 +1,6 @@
 import os
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
 from dotenv import load_dotenv
@@ -32,6 +34,27 @@ def read_prompt(filename: str) -> str:
         return ""
 
 # ---------------------------------------------------------
+# [NEW] 로그 출력 유틸리티 함수
+# ---------------------------------------------------------
+def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
+    """
+    터미널에 Timestamp, 진행 상태, 소요 시간, 추가 정보(생성된 SQL 등)를 출력하는 헬퍼 함수
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    
+    if status == "start":
+        print(f"[{now}] ⏳ [{step_name}] 시작...")
+        return time.time()
+        
+    elif status == "end" and start_time is not None:
+        elapsed = time.time() - start_time
+        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        if extra_info:
+            log_msg += f"\n   👉 {extra_info}"
+        print(log_msg)
+        return elapsed
+
+# ---------------------------------------------------------
 # DB 유틸리티 함수
 # ---------------------------------------------------------
 def get_schema_info(allowed_views: list):
@@ -39,7 +62,6 @@ def get_schema_info(allowed_views: list):
         if not allowed_views:
             return "No accessible tables provided."
             
-        # [수정] IN 절을 사용하여 한 번에 모든 컬럼 정보 조회
         placeholders = ','.join(['%s'] * len(allowed_views))
         sql = f"""
             SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE 
@@ -49,10 +71,8 @@ def get_schema_info(allowed_views: list):
             ORDER BY TABLE_NAME, ORDINAL_POSITION
         """
         
-        # 한 번의 연결로 해결
         results = get_data(sql, allowed_views)
         
-        # 메모리 상에서 텍스트 조합
         schema_dict = {}
         for row in results:
             t_name = row['TABLE_NAME']
@@ -87,7 +107,6 @@ def run_db_query(query):
     try:
         if not query:
             return "생성된 쿼리가 없습니다."
-        print(f"🔄 [DB Executing]: {query}")
         result = get_data(query)
         if not result:
             return "검색 결과가 없습니다."
@@ -111,10 +130,13 @@ class SQLAgentState(TypedDict, total=False):
 # [LangGraph] 노드
 # ---------------------------------------------------------
 def node_schema(state: SQLAgentState) -> dict:
+    t0 = print_log("1. 스키마 조회 (node_schema)", "start")
     schema = get_schema_info(state.get("allowed_views") or [])
+    print_log("1. 스키마 조회 (node_schema)", "end", t0)
     return {"schema": schema}
 
 def node_sql_gen(state: SQLAgentState) -> dict:
+    t0 = print_log("2. SQL 쿼리 생성 (node_sql_gen)", "start")
     template = read_prompt("sql_01_generation.md")
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
@@ -123,13 +145,22 @@ def node_sql_gen(state: SQLAgentState) -> dict:
         "schema": state["schema"],
     })
     query = clean_sql_query(raw)
+    
+    # 생성된 SQL 쿼리를 터미널에 함께 출력
+    print_log("2. SQL 쿼리 생성 (node_sql_gen)", "end", t0, extra_info=f"생성된 SQL:\n      {query}")
     return {"query": query}
 
 def node_execute(state: SQLAgentState) -> dict:
+    t0 = print_log("3. SQL 실행 (node_execute)", "start")
     result = run_db_query(state["query"])
+    
+    # 결과의 일부분만 샘플로 출력하여 터미널이 너무 길어지는 것을 방지
+    sample_result = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
+    print_log("3. SQL 실행 (node_execute)", "end", t0, extra_info=f"실행 결과 일부: {sample_result}")
     return {"result": result}
 
 def node_answer(state: SQLAgentState) -> dict:
+    t0 = print_log("4. 최종 답변 생성 (node_answer)", "start")
     template = read_prompt("sql_02_answer.md")
     prompt = PromptTemplate.from_template(template)
     chain = prompt | llm | StrOutputParser()
@@ -138,6 +169,7 @@ def node_answer(state: SQLAgentState) -> dict:
         "query": state["query"],
         "result": state["result"],
     })
+    print_log("4. 최종 답변 생성 (node_answer)", "end", t0)
     return {"response": response}
 
 # ---------------------------------------------------------
@@ -168,22 +200,32 @@ def get_sql_answer(question, username, allowed_views=None):
     try:
         if allowed_views is None:
             allowed_views = []
-        print(f"\n🔍 [SQL Agent] 질문 분석: '{question}' (User: {username})")
+            
+        print("\n" + "="*50)
+        total_t0 = print_log("SQL 에이전트 전체 파이프라인", "start")
+        print(f"   [입력 질문]: '{question}' (User: {username})")
+        print("="*50)
+        
         graph = _get_sql_graph()
         result = graph.invoke({
             "question": question,
             "username": username,
             "allowed_views": allowed_views,
         })
+        
+        print("="*50)
+        print_log("SQL 에이전트 전체 파이프라인", "end", total_t0)
+        print("="*50 + "\n")
+        
         return result.get("response", "응답을 생성하지 못했습니다.")
     except Exception as e:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         error_msg = f"데이터 조회 중 오류가 발생했습니다: {e}"
-        print(f"❌ [SQL Agent Error]: {error_msg}")
+        print(f"[{now}] ❌ [SQL Agent Error]: {error_msg}")
         return error_msg
 
 # --- 테스트 코드 ---
 if __name__ == "__main__":
     test_views = ["account_summary_view", "transaction_history_view"]
     q = "내 월급통장 잔액이 얼마야?"
-    print(f"Q: {q}")
     print(f"A: {get_sql_answer(q, 'test_user', test_views)}")

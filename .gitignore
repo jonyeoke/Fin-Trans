@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 /logs/chat_history.md
 /data/financial_terms/
+/logs/memory.md

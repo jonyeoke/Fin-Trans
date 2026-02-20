@@ -1,5 +1,7 @@
 import os
 import json
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import TypedDict, Literal
 from dotenv import load_dotenv
@@ -23,33 +25,52 @@ load_dotenv()
 llm = ChatOpenAI(model="gpt-5-mini")
 
 # [전역 설정]
-# 1. 대화 요약 저장소 (메모리 대신 사용)
 GLOBAL_CHAT_CONTEXT = {"summary": ""}
 
-# [NEW] 전역 컨텍스트 초기화 함수 (app.py에서 로그아웃 시 호출)
+CURRENT_DIR = Path(__file__).resolve().parent
+MEMORY_DIR = CURRENT_DIR.parent / "logs"
+MEMORY_FILE = MEMORY_DIR / "memory.md"
+
+# ---------------------------------------------------------
+# [로그 출력 유틸리티 함수]
+# ---------------------------------------------------------
+def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    if status == "start":
+        print(f"[{now}] ⏳ [{step_name}] 시작...")
+        return time.time()
+    elif status == "end" and start_time is not None:
+        elapsed = time.time() - start_time
+        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        if extra_info:
+            log_msg += f"\n   👉 {extra_info}"
+        print(log_msg)
+        return elapsed
+
 def reset_global_context():
-    """전역 대화 요약 초기화"""
     global GLOBAL_CHAT_CONTEXT
     GLOBAL_CHAT_CONTEXT["summary"] = ""
-    print("🧹 [Memory] 전역 대화 요약이 초기화되었습니다.")
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        f.write("# 대화 기록\n\n")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    print(f"[{now}] 🧹 [Memory] 대화 기록 파일(logs/memory.md)이 초기화되었습니다.")
 
-# 2. 웹 검색 에이전트 인스턴스 (재사용을 위해 전역 생성)
 web_rag = WebSearchRAG()
 
 # ---------------------------------------------------------
 # [설정] 프롬프트 경로 설정 및 로딩 함수
 # ---------------------------------------------------------
-CURRENT_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = CURRENT_DIR / "prompt" / "main"
 
 def read_prompt(filename: str) -> str:
-    """MD 파일을 읽어서 문자열로 반환하는 함수"""
     file_path = PROMPT_DIR / filename
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        print(f"❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ❌ [Error] 프롬프트 파일을 찾을 수 없습니다: {file_path}")
         return ""
 
 # ---------------------------------------------------------
@@ -59,6 +80,7 @@ class MainAgentState(TypedDict, total=False):
     question: str
     korean_query: str
     source_lang: str
+    needs_context: bool       # [NEW] 문맥 보정 필요 여부 플래그
     refined_query: str
     category: str
     korean_answer: str
@@ -67,12 +89,11 @@ class MainAgentState(TypedDict, total=False):
     username: str
     transfer_context: dict
     allowed_views: list
-    # 내부용
     _history: str
     _skip_re_translate: bool
 
 # ---------------------------------------------------------
-# [LangGraph] 프롬프트/체인 빌더 (노드에서 사용)
+# [LangGraph] 프롬프트/체인 빌더
 # ---------------------------------------------------------
 def _translation_chain():
     t = read_prompt("main_01_translation.md")
@@ -94,147 +115,166 @@ def _re_translation_chain():
     t = read_prompt("main_05_re_translation.md")
     return PromptTemplate.from_template(t) | llm | StrOutputParser()
 
-def _summarizer_chain():
-    t = read_prompt("main_06_summarizer.md")
-    return PromptTemplate.from_template(t) | llm | StrOutputParser()
-
 # ---------------------------------------------------------
-# 역번역 헬퍼 함수 (모든 답변에 적용)
+# 역번역 헬퍼 함수
 # ---------------------------------------------------------
 def translate_answer(korean_text: str, target_language: str) -> str:
-    """
-    한국어 답변을 사용자 입력 언어로 번역
-    - 한국어면 그대로 반환
-    - 다른 언어면 역번역 수행
-    """
     if not korean_text:
         return korean_text
     
-    # 한국어면 번역 불필요
     if "Korean" in target_language or "한국어" in target_language:
         return korean_text
     
+    t0 = print_log(f"역번역 (한국어 -> {target_language})", "start")
     try:
-        print(f"🔄 [Translation] 답변을 {target_language}로 번역 중...")
         chain = _re_translation_chain()
         translated = chain.invoke({
             "target_language": target_language,
             "korean_answer": korean_text
         }).strip()
+        print_log(f"역번역 (한국어 -> {target_language})", "end", t0)
         return translated
     except Exception as e:
-        print(f"⚠️ 역번역 실패: {e}, 원본 반환")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ⚠️ 역번역 실패: {e}, 원본 반환")
         return korean_text
 
 # ---------------------------------------------------------
 # [LangGraph] 노드 함수
 # ---------------------------------------------------------
 def node_translate(state: MainAgentState) -> dict:
+    t0 = print_log("Step 1: 입력 언어 감지 및 한국어 번역 (node_translate)", "start")
     question = state["question"]
     try:
         chain = _translation_chain()
         trans_result_str = chain.invoke({"question": question}).strip()
         trans_result_str = trans_result_str.replace("```json", "").replace("```", "")
         trans_result = json.loads(trans_result_str)
+        
         source_lang = trans_result.get("source_language", "Korean")
         korean_query = trans_result.get("korean_query", question)
-        print(f"🌐 [Step 1] 감지 언어: {source_lang} -> 변환: {korean_query}")
+        # [NEW] JSON에서 needs_context 파싱 (기본값 True로 설정하여 안전하게 폴백)
+        needs_context = trans_result.get("needs_context", True)
+        
+        extra = f"감지 언어: {source_lang} / 변환 쿼리: '{korean_query}' / 보정 필요: {needs_context}"
     except Exception as e:
-        print(f"⚠️ 번역 오류: {e}")
         source_lang = "Korean"
         korean_query = question
-    return {"korean_query": korean_query, "source_lang": source_lang}
+        needs_context = True # 파싱 에러 시 무조건 보정 단계를 거치도록 안전장치 설정
+        extra = f"번역 오류로 원본 유지: {e}"
+        
+    print_log("Step 1: 입력 언어 감지 및 한국어 번역 (node_translate)", "end", t0, extra_info=extra)
+    
+    # [NEW] 보정 단계(refine)를 건너뛸 수 있으므로 refined_query를 미리 korean_query로 설정
+    return {
+        "korean_query": korean_query, 
+        "source_lang": source_lang, 
+        "needs_context": needs_context,
+        "refined_query": korean_query
+    }
 
 def node_refine(state: MainAgentState) -> dict:
+    t0 = print_log("Step 2: 컨텍스트 기반 질문 보정 (node_refine)", "start")
     history_context = state.get("_history") or "이전 대화 기록 없음(No previous conversation history)."
     korean_query = state["korean_query"]
-    print(f"🧠 [Memory Summary]: {history_context}")
+    
     chain = _refinement_chain()
     refined_query = chain.invoke({"history": history_context, "question": korean_query}).strip()
+    
     if refined_query != korean_query:
-        print(f"✨ [Step 2] 질문 보정: '{korean_query}' -> '{refined_query}'")
+        extra = f"보정됨: '{korean_query}' -> '{refined_query}'"
     else:
-        print(f"✨ [Step 2] 질문 보정 없음 (변화 없음)")
+        extra = "보정 없음 (변화 없음)"
+        
+    print_log("Step 2: 컨텍스트 기반 질문 보정 (node_refine)", "end", t0, extra_info=extra)
     return {"refined_query": refined_query}
 
 def node_route(state: MainAgentState) -> dict:
+    t0 = print_log("Step 3: 의도 분류 및 라우팅 (node_route)", "start")
     chain = _router_chain()
+    # 만약 보정 노드를 거치지 않았더라도 node_translate에서 넣은 refined_query(기본 원문)가 사용됨
     category = chain.invoke({"question": state["refined_query"]}).strip()
     category = category.replace("'", "").replace('"', "").replace(".", "")
-    print(f"🕵️ [Step 3] 의도 분류: [{category}]")
+    
+    print_log("Step 3: 의도 분류 및 라우팅 (node_route)", "end", t0, extra_info=f"분류된 카테고리: [{category}]")
     return {"category": category}
 
 def node_sql(state: MainAgentState) -> dict:
-    print("\n=== 🏦 SQL Agent 호출 ===")
-    answer = get_sql_answer(
-        state["refined_query"],
-        state["username"],
-        state.get("allowed_views") or []
-    )
-    print("=== 🏦 SQL Agent 종료 ===\n")
+    t0 = print_log("Sub-Agent: SQL Agent 호출", "start")
+    answer = get_sql_answer(state["refined_query"], state["username"], state.get("allowed_views") or [])
+    print_log("Sub-Agent: SQL Agent 호출", "end", t0)
     return {"korean_answer": answer}
 
 def node_finrag(state: MainAgentState) -> dict:
-    print("\n=== 🎓 FinRAG Agent (Hybrid) 호출 ===")
+    t0 = print_log("Sub-Agent: FinRAG Agent 호출", "start")
     answer = get_rag_answer(state["refined_query"], original_query=state["question"])
-    print("=== 🎓 FinRAG Agent 종료 ===\n")
+    print_log("Sub-Agent: FinRAG Agent 호출", "end", t0)
     return {"korean_answer": answer}
 
 def node_transfer(state: MainAgentState) -> dict:
-    print("\n=== 💸 Transfer Agent 호출 ===")
-    # 최초 송금 요청 시 언어를 컨텍스트에 저장하기 위해 빈 컨텍스트 전달
+    t0 = print_log("Sub-Agent: Transfer Agent 호출", "start")
     result = get_transfer_answer(state["refined_query"], state["username"], context={})
+    
     if isinstance(result, dict):
-        # 최초 요청이면 언어 정보를 컨텍스트에 저장
         if result.get("context") and not result["context"].get("source_language"):
             source_lang = state.get("source_lang", "Korean")
             result["context"]["source_language"] = source_lang
+        print_log("Sub-Agent: Transfer Agent 호출", "end", t0, extra_info="송금 플로우 진행 (dict 반환)")
         return {"transfer_result": result, "korean_answer": None}
-    print("=== 💸 Transfer Agent 종료 ===\n")
+        
+    print_log("Sub-Agent: Transfer Agent 호출", "end", t0, extra_info="일반 텍스트 반환")
     return {"korean_answer": result, "transfer_result": None}
 
 def node_system(state: MainAgentState) -> dict:
-    print("\n=== 💬 System Prompt 호출 ===")
+    t0 = print_log("Sub-Agent: System Prompt 호출 (일반 대화)", "start")
     chain = _system_prompt_chain()
     answer = chain.invoke({"question": state["korean_query"]})
-    print("=== 💬 System Prompt 종료 ===\n")
+    print_log("Sub-Agent: System Prompt 호출 (일반 대화)", "end", t0)
     return {"korean_answer": answer}
 
 def node_fallback(state: MainAgentState) -> dict:
+    t0 = print_log("Fallback 처리", "start")
     korean_answer = "죄송해요, 질문의 의도를 정확히 파악하지 못했습니다."
-    print(f"❌ [Exception] 처리 불가 카테고리: {state.get('category', '')}")
+    print_log("Fallback 처리", "end", t0, extra_info=f"알 수 없는 카테고리: {state.get('category', '')}")
     return {"korean_answer": korean_answer}
 
 def node_summarize(state: MainAgentState) -> dict:
-    current_history = state.get("_history") or ""
+    t0 = print_log("대화 기록 저장 (node_summarize -> 파일 Append)", "start")
     refined_query = state.get("refined_query", "")
     korean_answer = state.get("korean_answer") or ""
+    
     if not isinstance(korean_answer, str):
+        print_log("대화 기록 저장 (node_summarize -> 파일 Append)", "end", t0, extra_info="답변이 문자열이 아니므로 스킵")
         return {}
-    print("📝 [Memory] 대화 요약 업데이트 중...")
+        
     try:
-        chain = _summarizer_chain()
-        new_summary = chain.invoke({
-            "current_summary": current_history,
-            "user_input": refined_query,
-            "ai_output": korean_answer
-        }).strip()
-        GLOBAL_CHAT_CONTEXT["summary"] = new_summary
-        print(f"✅ [Memory Updated]: {new_summary[:50]}...")
+        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+        with open(MEMORY_FILE, "a", encoding="utf-8") as f:
+            f.write(f"**User**: {refined_query}\n\n**AI**: {korean_answer}\n\n---\n\n")
+        extra = "메모리 파일에 성공적으로 Append 되었습니다."
     except Exception as e:
-        print(f"⚠️ 요약 업데이트 실패: {e}")
+        extra = f"메모리 업데이트 실패: {e}"
+        
+    print_log("대화 기록 저장 (node_summarize -> 파일 Append)", "end", t0, extra_info=extra)
     return {}
 
 def node_re_translate(state: MainAgentState) -> dict:
-    """모든 답변을 사용자 입력 언어로 역번역"""
+    t0 = print_log("최종 답변 역번역 (node_re_translate)", "start")
     source_lang = state.get("source_lang", "Korean")
     korean_answer = state.get("korean_answer", "")
     final_answer = translate_answer(korean_answer, source_lang)
+    print_log("최종 답변 역번역 (node_re_translate)", "end", t0)
     return {"final_answer": final_answer}
 
 # ---------------------------------------------------------
-# 라우터: 카테고리별 다음 노드
+# 라우터 함수들
 # ---------------------------------------------------------
+def check_needs_context(state: MainAgentState) -> Literal["refine", "route"]:
+    """[NEW] 번역 노드에서 판단한 needs_context 값에 따라 보정 노드를 거칠지 결정"""
+    if state.get("needs_context", True):
+        return "refine"
+    return "route"
+
 def route_by_category(state: MainAgentState) -> Literal["sql", "finrag", "transfer", "system", "fallback"]:
     cat = (state.get("category") or "").strip()
     if cat == "DATABASE":
@@ -247,7 +287,6 @@ def route_by_category(state: MainAgentState) -> Literal["sql", "finrag", "transf
         return "system"
     return "fallback"
 
-# transfer 노드 결과가 dict면 END로 (송금 플로우는 별도 반환)
 def after_transfer(state: MainAgentState) -> Literal["summarize", "end_transfer"]:
     if state.get("transfer_result") is not None:
         return "end_transfer"
@@ -271,8 +310,19 @@ def _build_main_graph():
     builder.add_node("re_translate", node_re_translate)
 
     builder.add_edge(START, "translate")
-    builder.add_edge("translate", "refine")
+    
+    # [NEW] 기존의 무조건 연결 대신 조건부 연결(Conditional Edge) 적용
+    builder.add_conditional_edges(
+        "translate",
+        check_needs_context,
+        {
+            "refine": "refine",
+            "route": "route"
+        }
+    )
+    
     builder.add_edge("refine", "route")
+    
     builder.add_conditional_edges("route", route_by_category, {
         "sql": "sql",
         "finrag": "finrag",
@@ -290,7 +340,6 @@ def _build_main_graph():
 
     return builder.compile()
 
-# 전역 컴파일된 그래프 (캐시)
 _compiled_graph = None
 
 def get_main_graph():
@@ -303,31 +352,20 @@ def get_main_graph():
 # 메인 에이전트 실행 함수 (Orchestrator)
 # ---------------------------------------------------------
 def run_fintech_agent(question, username="test_user", transfer_context=None, allowed_views=None):
-    """
-    [Params]
-    - question: 사용자 질문
-    - username: 사용자 ID (SQL, 송금 등에서 사용)
-    - transfer_context: 송금 진행 중인 상태 데이터 (있으면 즉시 송금 로직 수행)
-    - allowed_views: SQL 에이전트가 조회 가능한 뷰 목록
-    """
-    print(f"\n[User Input]: {question}")
+    print("\n" + "="*60)
+    total_t0 = print_log("Main Agent 전체 파이프라인", "start")
+    print(f"   [User Input]: {question}")
+    print("="*60)
 
-    # [Priority] 송금 컨텍스트가 있으면 LangGraph 거치지 않고 바로 송금 에이전트
     if transfer_context:
-        print("💸 [System] 송금 진행 중... (Context 유지)")
-        
-        # 최초 질문의 언어를 컨텍스트에서 가져오기 (없으면 현재 입력으로 감지)
+        t0_ctx = print_log("진행 중인 송금 컨텍스트(Transfer Context) 처리", "start")
         source_lang = transfer_context.get("source_language", "Korean")
         
-        # 버튼 신호나 숫자 입력은 번역하지 않음 (저장된 언어 사용)
         if question.strip().upper() in ("__YES__", "__NO__"):
             korean_query = question
-            # 저장된 언어가 없으면 기본값 사용 (이미 위에서 설정됨)
         elif question.strip().isdigit() or (len(question.strip()) <= 10 and not any(c.isalpha() for c in question)):
-            # 숫자나 짧은 비문자 입력(PIN 등)은 번역하지 않고, 저장된 언어 사용
             korean_query = question
         else:
-            # 텍스트 입력이면 언어 감지 시도
             try:
                 chain = _translation_chain()
                 trans_result_str = chain.invoke({"question": question}).strip()
@@ -336,38 +374,44 @@ def run_fintech_agent(question, username="test_user", transfer_context=None, all
                 detected_lang = trans_result.get("source_language", "Korean")
                 korean_query = trans_result.get("korean_query", question)
                 
-                # 컨텍스트에 언어가 없으면 새로 감지한 언어 저장
                 if source_lang == "Korean" and detected_lang != "Korean":
                     source_lang = detected_lang
                     transfer_context["source_language"] = source_lang
             except Exception:
                 korean_query = question
         
-        # 송금 에이전트 호출
         transfer_result = get_transfer_answer(korean_query, username, context=transfer_context)
         
-        # dict 반환 시 message 필드 역번역 (저장된 언어 사용)
         if isinstance(transfer_result, dict) and "message" in transfer_result:
             korean_msg = transfer_result["message"]
             translated_msg = translate_answer(korean_msg, source_lang)
             transfer_result["message"] = translated_msg
-            # 컨텍스트에 언어 정보 유지 (진행 중 상태일 때)
             if "context" in transfer_result:
                 transfer_result["context"]["source_language"] = source_lang
         
+        print_log("진행 중인 송금 컨텍스트(Transfer Context) 처리", "end", t0_ctx)
+        print("="*60)
+        print_log("Main Agent 전체 파이프라인", "end", total_t0)
+        print("="*60 + "\n")
         return transfer_result
+
+    history_text = ""
+    if MEMORY_FILE.exists():
+        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+            history_text = f.read()
+    else:
+        history_text = "이전 대화 기록 없음(No previous conversation history)."
 
     initial_state: MainAgentState = {
         "question": question,
         "username": username,
         "allowed_views": allowed_views or [],
-        "_history": GLOBAL_CHAT_CONTEXT["summary"],
+        "_history": history_text,
     }
 
     graph = get_main_graph()
     result = graph.invoke(initial_state)
 
-    # 송금 결과가 dict면 message 필드 역번역 후 반환
     if result.get("transfer_result") is not None:
         transfer_result = result["transfer_result"]
         source_lang = result.get("source_lang", "Korean")
@@ -375,6 +419,16 @@ def run_fintech_agent(question, username="test_user", transfer_context=None, all
             korean_msg = transfer_result["message"]
             translated_msg = translate_answer(korean_msg, source_lang)
             transfer_result["message"] = translated_msg
+            
+        print("="*60)
+        print_log("Main Agent 전체 파이프라인 (Transfer)", "end", total_t0)
+        print("="*60 + "\n")
         return transfer_result
 
-    return result.get("final_answer") or result.get("korean_answer") or ""
+    final_answer = result.get("final_answer") or result.get("korean_answer") or ""
+    
+    print("="*60)
+    print_log("Main Agent 전체 파이프라인", "end", total_t0)
+    print("="*60 + "\n")
+    
+    return final_answer

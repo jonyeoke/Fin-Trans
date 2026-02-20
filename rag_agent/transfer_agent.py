@@ -1,5 +1,7 @@
 import os
 import json
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import TypedDict, List
 from dotenv import load_dotenv
@@ -16,7 +18,25 @@ from utils.handle_sql import get_data, execute_query
 # 1. 환경 설정
 load_dotenv()
 # 온도가 0이어야 추출 및 매칭이 일관적입니다.
-llm = ChatOpenAI(model="gpt-5-mini")
+llm = ChatOpenAI(model="gpt-5-mini", temperature=0)
+
+# ---------------------------------------------------------
+# [NEW] 로그 출력 유틸리티 함수
+# ---------------------------------------------------------
+def print_log(step_name: str, status: str, start_time: float = None, extra_info: str = None):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    
+    if status == "start":
+        print(f"[{now}] ⏳ [{step_name}] 시작...")
+        return time.time()
+        
+    elif status == "end" and start_time is not None:
+        elapsed = time.time() - start_time
+        log_msg = f"[{now}] ✅ [{step_name}] 완료 (소요시간: {elapsed:.3f}초)"
+        if extra_info:
+            log_msg += f"\n   👉 {extra_info}"
+        print(log_msg)
+        return elapsed
 
 # ---------------------------------------------------------
 # [설정] 프롬프트 경로 (필요 시 유지, 여기서는 코드 내장 프롬프트 사용)
@@ -38,14 +58,15 @@ def _parse_transfer_json(text: str) -> dict:
         text = text.strip().replace("```json", "").replace("```", "")
         return json.loads(text)
     except Exception as e:
-        print(f"JSON Parsing Error: {e}, Raw: {text}")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ❌ JSON Parsing Error: {e}, Raw: {text}")
         return {"target": None, "amount": None, "currency": None}
 
 def _node_extract(state: TransferExtractState) -> dict:
     """
     사용자 발화에서 송금 대상, 금액, 통화를 추출합니다.
-    (수정됨: '만원' 등의 단위 처리를 위한 강력한 프롬프트 적용)
     """
+    t0 = print_log("1. LLM 송금 정보 추출 (node_extract)", "start")
     
     # 한국어 금액 단위 처리 및 JSON 강제 프롬프트
     template = """
@@ -79,7 +100,7 @@ def _node_extract(state: TransferExtractState) -> dict:
     raw = chain.invoke({"question": state["question"]})
     extracted = _parse_transfer_json(raw)
     
-    print(f"🔹 [Extraction Result]: {extracted}")  # 디버깅용 출력
+    print_log("1. LLM 송금 정보 추출 (node_extract)", "end", t0, extra_info=f"추출 결과: {extracted}")
     return {"raw_llm_output": raw, "extracted": extracted}
 
 _transfer_extract_graph = None
@@ -107,7 +128,10 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
     단순 문자열 비교 실패 시, LLM을 통해 의미적 매칭을 수행합니다.
     예: user_input="엄마", contacts=[{'contact_name': 'Mother'}] -> returns 'Mother'
     """
+    t0 = print_log("2. LLM 기반 연락처 의미 매칭", "start")
+    
     if not contacts:
+        print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info="연락처 목록이 비어있음")
         return None
 
     # 후보 리스트 텍스트화
@@ -138,16 +162,21 @@ def _find_best_match_contact_llm(user_input: str, contacts: List[dict]) -> str |
         
         # "NONE"이거나 이상한 문자열이 반환될 경우 처리
         if matched_name == "NONE":
+            print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info="적절한 매칭 대상 없음 (NONE)")
             return None
         
         # LLM이 반환한 이름이 실제 리스트에 존재하는지 재검증 (환각 방지)
         for c in contacts:
             if c["contact_name"] == matched_name:
+                print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info=f"매칭 성공: '{matched_name}'")
                 return matched_name
+                
+        print_log("2. LLM 기반 연락처 의미 매칭", "end", t0, extra_info=f"매칭 실패: 반환된 이름 '{matched_name}'이 DB에 없음")
         return None
         
     except Exception as e:
-        print(f"⚠️ LLM Matching Error: {e}")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ⚠️ LLM Matching Error: {e}")
         return None
 
 # ---------------------------------------------------------
@@ -190,19 +219,17 @@ def resolve_contact_name(user_id, user_input):
 
     # 1. 1차 시도: 정확한 문자열 매칭 (Python Loop) - 속도 최우선
     for c in contacts:
-        # 이름 비교
         if user_input_lower == c["contact_name"].lower():
             return c["contact_name"]
-        # 관계 비교 (DB에 relationship 컬럼이 있는 경우)
         if c.get("relationship") and user_input_lower == str(c["relationship"]).lower():
             return c["contact_name"]
             
-    # 2. 2차 시도: LLM을 이용한 의미론적 매칭 (엄마 -> Mother 해결)
-    print(f"🔀 '{user_input}' 정확한 매칭 실패. LLM 매칭 시도...")
+    # 2. 2차 시도: LLM을 이용한 의미론적 매칭
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    print(f"[{now}] 🔀 '{user_input}' 정확한 DB 매칭 실패. LLM 매칭 시도...")
     matched_name = _find_best_match_contact_llm(user_input_clean, contacts)
     
     if matched_name:
-        print(f"✅ LLM 매칭 성공: {user_input} -> {matched_name}")
         return matched_name
 
     return None
@@ -274,6 +301,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
     # 1. PIN Code 입력 단계
     # --------------------------------------------------
     if context.get("awaiting_password"):
+        t0_pin = print_log("송금 승인: PIN 검증 및 트랜잭션 실행", "start")
         stored_pin = get_user_password(username)
         if not stored_pin:
             return {"status": "ERROR", "message": "사용자 정보를 찾을 수 없습니다."}
@@ -285,8 +313,10 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         if bcrypt.checkpw(question.encode('utf-8'), stored_pin) == False:
             context["password_attempts"] = context.get("password_attempts", 0) + 1
             if context["password_attempts"] >= 5:
+                print_log("송금 승인: PIN 검증", "end", t0_pin, extra_info="PIN 5회 오류로 취소")
                 return {"status": "FAIL", "message": "PIN Code 5회 오류. 송금 실패."}
 
+            print_log("송금 승인: PIN 검증", "end", t0_pin, extra_info=f"오류 횟수: {context['password_attempts']}")
             return {
                 "status": "NEED_PASSWORD",
                 "message": f"PIN Code 오류. 남은 기회: {5 - context['password_attempts']}",
@@ -295,7 +325,6 @@ def process_transfer(question: str, username: str, context: dict | None = None):
 
         # 송금 실행 (DB 업데이트)
         account = get_primary_account(user_id)
-        # 중요: context["target"]은 이미 검증된 'contact_name'이어야 함
         contact = get_contact(user_id, context["target"]) 
 
         new_balance = float(account["balance"]) - context["amount_krw"]
@@ -311,21 +340,25 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             context["currency"]
         )
 
+        print_log("송금 승인: PIN 검증 및 트랜잭션 실행", "end", t0_pin, extra_info=f"송금 완료 / 남은 잔액: {int(new_balance):,}")
         return {"status": "SUCCESS", "message": f"송금이 완료되었습니다. (잔액: {int(new_balance):,}원)"}
 
     # --------------------------------------------------
-    # 2. 확인 단계
+    # 2. 확인 단계 (Yes / No)
     # --------------------------------------------------
     if context.get("awaiting_confirm"):
+        t0_cf = print_log("송금 전 최종 확인", "start")
         yes_signals = ["__yes__", "y", "yes", "네", "응", "맞아"]
         no_signals  = ["__no__",  "n", "no", "아니", "취소"]
 
         answer = question.strip().lower()
 
         if answer in no_signals:
+            print_log("송금 전 최종 확인", "end", t0_cf, extra_info="사용자 송금 취소")
             return {"status": "CANCEL", "message": "송금이 취소되었습니다."}
 
         if answer not in yes_signals:
+            print_log("송금 전 최종 확인", "end", t0_cf, extra_info="응답 불분명, 재확인 요청")
             return {
                 "status": "CONFIRM",
                 "message": context.get("confirm_message", "송금을 확인해주세요."),
@@ -337,6 +370,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
         context["awaiting_password"] = True
         context["password_attempts"] = 0
 
+        print_log("송금 전 최종 확인", "end", t0_cf, extra_info="승인 확인됨. PIN 요청 진행")
         return {
             "status": "NEED_PASSWORD",
             "message": "PIN Code를 입력해주세요.",
@@ -348,11 +382,12 @@ def process_transfer(question: str, username: str, context: dict | None = None):
     # --------------------------------------------------
     if context.get("missing_field"):
         field = context["missing_field"]
+        t0_hitl = print_log(f"누락된 정보({field}) 보완 처리", "start")
 
         if field == "target":
-            # [수정] 여기서도 향상된 resolve 로직 사용
             resolved = resolve_contact_name(user_id, question)
             if not resolved:
+                print_log(f"누락된 정보({field}) 보완 처리", "end", t0_hitl, extra_info="연락처 조회 실패")
                 return {
                     "status": "NEED_INFO",
                     "field": "target",
@@ -363,10 +398,10 @@ def process_transfer(question: str, username: str, context: dict | None = None):
 
         elif field == "amount":
             try:
-                # 간단한 숫자 처리 (복잡한 건 LLM이 했어야 함)
                 clean_amt = question.strip().replace(",", "").replace("원", "")
                 context["amount"] = float(clean_amt)
             except:
+                print_log(f"누락된 정보({field}) 보완 처리", "end", t0_hitl, extra_info="금액 파싱 실패")
                 return {
                     "status": "NEED_INFO",
                     "field": "amount",
@@ -378,6 +413,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             context["currency"] = question.strip().upper()
 
         context.pop("missing_field")
+        print_log(f"누락된 정보({field}) 보완 처리", "end", t0_hitl, extra_info=f"성공적으로 보완됨: {context.get(field)}")
 
     # --------------------------------------------------
     # 4. 최초 요청 (LangGraph 추출)
@@ -402,7 +438,6 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             "context": context
         }
 
-    # [수정] LLM 매칭 포함된 함수 호출
     resolved = resolve_contact_name(user_id, target)
     if not resolved:
         context["missing_field"] = "target"
@@ -412,7 +447,7 @@ def process_transfer(question: str, username: str, context: dict | None = None):
             "message": f"'{target}'님을 연락처에서 찾을 수 없습니다. 정확한 이름을 알려주세요.",
             "context": context
         }
-    context["target"] = resolved  # DB에 있는 정확한 이름으로 갱신
+    context["target"] = resolved
 
     # 금액 검증
     if not amount:
@@ -465,10 +500,21 @@ def process_transfer(question: str, username: str, context: dict | None = None):
 # 외부 호출 함수
 # ---------------------------------------------------------
 def get_transfer_answer(question, username, context=None):
+    print("\n" + "-"*50)
+    total_t0 = print_log("Transfer Agent 상태 머신 파이프라인", "start")
+    
     try:
-        return process_transfer(question, username, context)
+        result = process_transfer(question, username, context)
+        
+        print("-" * 50)
+        print_log("Transfer Agent 상태 머신 파이프라인", "end", total_t0, extra_info=f"최종 상태: {result.get('status')}")
+        print("-" * 50 + "\n")
+        return result
+        
     except Exception as e:
         import traceback
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        print(f"[{now}] ❌ Transfer Agent 오류: {e}")
         traceback.print_exc()
         return {"status": "ERROR", "message": f"시스템 오류가 발생했습니다: {e}"}
 
