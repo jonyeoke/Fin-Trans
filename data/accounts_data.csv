@@ -1,0 +1,4 @@
+account_id,user_id,bank_name,bank_code,account_number,account_alias,balance,is_primary
+1,1,우리은행,020,1002-111-222222,월급통장,2980873.00,1
+2,2,"Chase Bank",NULL,987654321,"Main Account",11000.00,1
+3,3,Vietcombank,NULL,001122334455,"Main Account",79983382.40,1
