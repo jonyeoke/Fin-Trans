@@ -17,8 +17,7 @@ from utils.handle_sql import get_data, execute_query
 
 # 1. 환경 설정
 load_dotenv()
-# 온도가 0이어야 추출 및 매칭이 일관적입니다.
-llm = ChatOpenAI(model="gpt-5-mini", temperature=0)
+llm = ChatOpenAI(model="gpt-5-mini")
 
 # ---------------------------------------------------------
 # [NEW] 로그 출력 유틸리티 함수
