@@ -59,7 +59,6 @@ def local_css():
         div.stButton > button {
             background: #FFFFFF; color: #64748B !important; border: 1px solid #CBD5E1 !important;
             padding: 0.5rem 1rem !important; width: 100%;
-            width: auto !important;
         }
         div.stButton > button:hover {
             background: #FFFFFF !important; color: #64748B !important;
@@ -69,7 +68,6 @@ def local_css():
             background: #FFFFFF; 
             border: 1px solid #CBD5E1 !important; 
             color: #64748B !important; 
-            width: auto !important;
         }  
                 
         /* 메시지 버블 스타일 */
