@@ -211,7 +211,7 @@ def login_page():
             password_input = st.text_input("계정 비밀번호 (Password)", type="password", placeholder="비밀번호를 입력하세요")
             
             st.markdown("####") 
-            _, col_btn = st.columns([4, 1])
+            _, col_btn = st.columns([3.5, 1.5])
             with col_btn:
                 submitted = st.form_submit_button("로그인", use_container_width=True)
             
