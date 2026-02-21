@@ -24,6 +24,8 @@ load_dotenv()
 # LLM 설정
 llm = ChatOpenAI(model="gpt-5-mini")
 
+GLOBAL_CHAT_CONTEXT = {"summary": ""}
+
 CURRENT_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = CURRENT_DIR.parent / "logs"
 MEMORY_FILE = MEMORY_DIR / "memory.md"
