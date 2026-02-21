@@ -24,7 +24,6 @@ load_dotenv()
 # LLM 설정
 llm = ChatOpenAI(model="gpt-5-mini")
 
-GLOBAL_CHAT_CONTEXT = {"summary": ""}
 
 CURRENT_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = CURRENT_DIR.parent / "logs"
@@ -47,8 +46,6 @@ def print_log(step_name: str, status: str, start_time: float = None, extra_info:
         return elapsed
 
 def reset_global_context():
-    global GLOBAL_CHAT_CONTEXT
-    GLOBAL_CHAT_CONTEXT["summary"] = ""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         f.write("# 대화 기록\n\n")
