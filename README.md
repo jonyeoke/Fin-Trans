@@ -1,5 +1,5 @@
 # 🐘 벗 (BeoTT)
-**Bridge for easy overseas Translator & Transaction**
+**Bridge for easy overseas Transaction & Translator**
 
 
 > **"한국에서의 복잡한 금융 업무, 당신의 든든한 친구 '벗(BeoTT)'이 도와줄게요!"** 
